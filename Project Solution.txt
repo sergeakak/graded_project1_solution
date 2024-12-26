@@ -1,0 +1,826 @@
+========================
+PROJECT 1 RESOLUTION:
+=======================
+(By SERGE AKAK)
+
+
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+                                    TASK 1
+                    Push the code out to github repository
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+==> Source code is downloaded in our local machine
+
+==> Turn code location in local computer into a git local reporsitory as follow:
+    
+    - Open git bash terminal in folder where code is downloaded in local machine
+    - Execute "git init" command
+
+
+==> Execute source code commit process to master branch with following git commands:
+    
+    - git add .
+    - git commit -m "source code"
+    - git log --oneline 
+
+==> Go to github account, and create remote repository
+    
+    - Take note of remote repository URL : https://github.com/sergeakak/ABC-Technologies.git
+
+
+==> Connect, or link remote repository with local repository using following commands:
+
+    - git remote add origin https://github.com/sergeakak/ABC-Technologies.git
+    - git remote -v (to check verify if connection established, or successful)
+
+
+==> Push source code/ master branch from local to remote repository using following command:
+   
+    - git push origin master
+
+
+
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+                                         TASK 2
+ Create a continuous integration pipeline using Jenkins to compile,test and package 
+ the code present in git hub
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+
+1. Create 3 jobs
+
+  a) Compiling source code
+     Go to jenkins dashboard and create new job of freestyle type.
+    
+    > freestyle job name 'code-compile'
+    > source code git 'https://github.com/sergeakak/ABC-Technologies.git'
+    > execute shell or invoke top maven target ==> mvn compile 
+
+    
+  b) Testing source code
+     Go to jenkins dashboard and create new job of freestyle type.
+    
+    > freestyle job name 'testing-code'
+    > source code git 'https://github.com/sergeakak/ABC-Technologies.git'
+    > execute shell or invoke top maven target ==> mvn test
+    
+
+  c) Packing the code
+     Go to jenkins dashboard and create new job of freestyle type.
+    
+    > freestyle job name 'code-package'
+    > source code git 'https://github.com/sergeakak/ABC-Technologies.git'
+    > execute shell or invoke top maven target ==> mvn package
+    
+
+
+2. Setup CI pipeline to execute the jobs created in step 1
+
+    > Name of job "ABC-Technologies-CI"
+    > Definition of Pipeline --> Pipeline Script 
+    > Create/write a pipeline script to execute CI steps 
+
+===> Below is our pipeline script
+
+
+pipeline 
+{
+    agent any
+    stages 
+    {
+        stage('Code Checkout') 
+        {
+	       steps 
+               {
+                  git 'https://github.com/sergeakak/ABC-Technologies.git'
+               }
+        }
+
+        stage('Code Compile') 
+       {
+	     steps 
+            {
+               sh 'mvn compile'
+            }
+			
+       }
+
+        stage('Unit Test') 
+       {
+	    steps 
+            {
+               sh 'mvn test'
+            }
+			
+       }
+
+        stage('Build Code') 
+        {
+             steps 
+             {
+                sh 'mvn package'
+             }
+				
+        }
+        
+    }
+}
+
+
+
+
+
+3. Setup master-slave node to distribute the tasks in pipeline
+
+
+
+   > Jenkins Dashboard > Manage Jenkins > Nodes > New Node
+
+   > Created 2 ubuntu VM on my GCP 
+
+   > Create a directory, or workspace called "jenkins" and cd into directory 
+
+   > With "pwd" command take note of path to workspace to use for configuration of slave machine on Jenkins
+
+   > Install JAVA, and MAVEN on slaves machines
+
+   > On jenkins I created 2 nodes named: 'ubuntu1' and 'ubuntu2', and labeled 'node-slave1', and 'node-salve2' respectively.
+
+   > Run commands to connect nodes/agents to master node/jenkins
+    
+
+    node-slave1 ==> java -jar agent.jar -url http://10.206.0.4:8080/ -secret @secret-file -name ubuntu1 -webSocket -workDir "/root/jenkins "
+
+    node-slave2 ==> java -jar agent.jar -url http://10.206.0.4:8080/ -secret @secret-file -name ubuntu2 -webSocket -workDir "/root/jenkins "
+
+
+===> I distributed tasks between built-in node, and slaves using "in stage" strategy on pipeline script as follow:
+
+
+pipeline 
+{
+    agent none
+    
+    stages 
+    {
+        stage('Code Checkout') 
+      
+
+        {  
+            steps 
+               {
+                  git 'https://github.com/sergeakak/ABC-Technologies.git'
+               }
+ agent {
+    label 'built-in'
+      }
+        }
+
+
+        stage('Code Compile')  
+  
+        {    
+	     steps 
+            {
+               sh 'mvn compile'
+            }
+agent {
+    label 'node-slave1'
+  }
+			
+       }
+
+
+        stage('Unit Test') 
+           
+       {    
+            
+	    steps 
+            {
+               sh 'mvn test'
+            }
+agent {
+    label 'node-slave2'
+  }
+			
+       }
+
+
+        stage('Build Code') 
+         {  
+   
+             steps 
+             {
+                sh 'mvn package'
+             }
+            agent {
+                   label 'node-slave1'
+                }		
+        }
+    }
+
+}
+
+
+
+
+
+
+===>>> OUTPUT OF SUCCESSFUL JOB: 
+
+       Building war: /var/lib/jenkins/workspace/ABC-Technologies-CI/target/ABCtechnologies-1.0.war
+
+       Artifact: ABCtechnologies-1.0.war
+
+
+   
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+                                         TASK 3: DEPLOYMENT
+                    Write docker file to push the war file to tomcat server
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
+1. Write a Dockerfile to create an image, and container on docker host.
+   
+   > In our dockerfile we will add code to move the war file to tomcat server and build the image
+   
+   > Our dockerfile will have tomcat as base image
+
+   > Here is our dockerfile:
+     
+     vi dockerfile 
+
+        FROM tomcat:latest
+        COPY abc_tech.war /usr/local/tomcat/webapps/
+        RUN sed -i 's/port="8080"/port="9090"/g' /usr/local/tomcat/conf/server.xml
+        EXPOSE 9090
+        CMD ["catalina.sh", "run"]
+
+
+     
+2. Enhance the package job created in step 1 of task 2 to create a docker image.
+
+   
+     We will create CI/CD job on Jenkins to build and deploy on a container
+
+    > We will enhance or modified our pipeline script to create a docker image.
+
+    > Here is our enhanced pipeline script:
+
+
+pipeline 
+{
+    agent any
+  
+environment {
+        DOCKER_IMAGE = "serge24/abctech_app"
+        WORK_DIR = "/var/lib/jenkins/workspace/ABC-Technologies-CI"
+    }
+
+
+    stages 
+    {
+        stage('Code Checkout') 
+        {
+	       steps 
+               {
+                  git 'https://github.com/sergeakak/ABC-Technologies.git'
+               }
+        }
+
+        stage('Code Compile') 
+       {
+	     steps 
+            {
+               sh 'mvn compile'
+            }
+			
+       }
+
+        stage('Unit Test') 
+       {
+	    steps 
+            {
+               sh 'mvn test'
+            }
+			
+       }
+
+        stage('Build Code') 
+        {
+             steps 
+             {
+                sh 'mvn package'
+             }
+				
+        }
+   
+
+stage('Build Docker Image') {
+            steps {
+                sh 'cp ${WORK_DIR}/target/ABCtechnologies-1.0.war abc_tech.war'
+                sh 'docker build -t ${DOCKER_IMAGE}:latest .'
+            }
+        }
+
+
+stage('Push Docker Image') {
+            steps {
+                withDockerRegistry([credentialsId: "mydocker", url: ""]) 
+		{
+                    sh 'docker push ${DOCKER_IMAGE}:latest'
+                }
+            }
+        }
+
+
+ stage('Deploy as container') {
+            steps
+            {
+                sh 'docker run -itd -P --name tech_app ${DOCKER_IMAGE}:latest'
+            }
+        }
+
+
+    }
+}
+
+
+
+
+
+==============================================================================================================
+Task 4:  Intergration Docker-Ansible-Jenkins    and    Intergration Kubernetes-Ansible-Jenkins
+===============================================================================================================
+
+
+
+A/ Intergration Docker-Ansible-Jenkins 
+======================================
+
+
+1- Integrate Docker host with Ansible. 
+
+   - On my Jenkins server i have installed Ansible and docker-py 
+     (pip install 'docker-py>=1.7.0') in order to use ansible docker modules.
+
+   - Created 2 worker instances with user "devops" to run docker commands, and also installed docker, and docker-py
+
+   - Created SSH connectivity between Ansible master and the 2 worker instances
+       ---> On ansible host
+             > ssh-keygen to generate the ssh keys
+             > ssh-copy-id <user name>@private_ip_of_workernode to copy the public keys to authoried_keys on worker nodes
+             > Connect to worker nodes via SSH
+             > Add the remote managed nodes ipaddress to to inventory file ==> sudo vim /etc/ansible/hosts
+
+
+    
+    ---> nodes.inv (inventory file)
+         [nodes]
+         10.206.0.8 ansible_user=devops
+         10.206.0.7 ansible_user=devops
+
+
+
+2- Write ansible playbook to create Image and create container. 
+
+
+I created a Ansible playbook named "deploy_docker_playbook.yml". Below is the file.
+A prerequisite is to have our dockerfile created.
+
+
+sudo vi deploy_docker_playbook.yml
+
+---
+- hosts: all
+  become: true
+  tasks:
+    - name: Copy war file to remote nodes
+      copy:
+        src: ./abc_tech.war
+        dest: /home/devops
+    - name: Copy Dockerfile to remote nodes
+      copy:
+       src: ./Dockerfile
+       dest: /home/devops
+    - name: login to dockerhub
+      docker_login:
+        username: ******
+        password: ******
+    - name: build docker image
+      command: docker build -t tech_app:v1 .
+    - name: tag image
+      command: docker tag tech_app:v1 serge24/tech_app:v1
+    - name: push image
+      command: docker push serge24/tech_app:v1
+    - name: creating docker container
+      command: docker run -d --name mytech_app -P tech_app:v1
+
+
+
+
+3- Integrate Ansible with Jenkins.
+
+   - Install Ansible plugin on Jenkins ==> Dashboard > Manage Jenkins > Plugins
+
+   - Configure Ansible in global configuration on jenkins and create credentialsID using user (Devops) and password.
+     Label for credentialsID is "myansible2"
+     ( Jenkins Dashboard > Manage Jenkins Credentials > System > Global credentials (unrestricted) )
+ 
+
+
+4- Deploy ansible-playbook in CI/CD job to create Image, and deploy it on docker container using ansible
+
+   Let's modified or enhance our CI/CD pipeline script to run ansible playbook and deploy on docker container.
+   Below is the pipeline script:
+
+
+pipeline 
+{
+    agent any
+
+ environment 
+       {
+        WORK_DIR = "/var/lib/jenkins/workspace/ABC-Technologies-CI"
+       }
+
+    stages 
+    {
+        stage('Code Checkout') 
+        {
+	       steps 
+               {
+                  git 'https://github.com/sergeakak/ABC-Technologies.git'
+               }
+        }
+
+        stage('Code Compile') 
+       {
+	     steps 
+            {
+               sh 'mvn compile'
+            }
+			
+       }
+
+        stage('Unit Test') 
+       {
+	    steps 
+            {
+               sh 'mvn test'
+            }
+			
+       }
+
+        stage('Build Code') 
+        {
+             steps 
+             {
+                sh 'mvn package'
+             }
+				
+        }
+
+
+        stage('Copy War File') {
+            steps {
+                sh 'cp ${WORK_DIR}/target/ABCtechnologies-1.0.war abc_tech.war'
+            }
+        }
+
+
+stage('Deploy as Docker Container with Ansible Playbook') 
+           {
+             steps {
+                    
+                    script {
+                             ansiblePlaybook credentialsId: 'myansible2',
+			            disableHostKeyChecking: true,
+			                      installation: 'ansible',
+			                         inventory: 'nodes.inv',
+			                          playbook: 'deploy_docker_playbook.yml',
+			                      vaultTmpPath: ''
+			}
+                  } 
+            }
+
+    }
+}
+
+
+
+
+
+B/ Intergration Kubernetes-Ansible-Jenkins to Deploy Artifact on Kubernetes
+===========================================================================
+
+
+
+      > For this task i created 2 new ubuntu VM. One is kubernetes master node, and one slave node.
+
+      > Install Kubernetes on both VMs and join slave to cluster.
+
+      > Create SSH connectivity between my Ansible machine and kubernetes master machine.
+
+
+
+  1. Let's Write/create pod, service, and deployment manifest files
+
+
+   a) Deployment Manifest File
+
+     vi abctech-deployment.yml
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: abctech-deployment
+  labels:
+    app: abctech-app
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: abctech-app
+  template:
+    metadata:
+      name: abctech-pod
+      labels:
+        app: abctech-app
+    spec:
+      containers:
+      - name: myabc-tech
+        image: serge24/tech_app:latest
+...
+
+
+   b) Service Manifest File
+
+    vi abctech-service.yml
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: abctech-service
+  labels:
+   app: abctech-app
+spec:
+  type: NodePort
+  ports:
+   - targetPort: 9090
+     port: 9090
+     nodePort: 30010
+  selector:
+    app: abctech-app
+...
+
+
+
+  2. Let's Write Ansible Playbook to create deployment and service
+
+
+    a) Deployment Playbook
+
+      vi deployment-playbook.yml
+
+
+---
+- name: create deployment pod
+  hosts: kubernetes
+  become: true
+  user: devops
+  tasks:
+  - name: deployment pod
+    command: kubectl apply -f abctech-deployment.yml
+
+- name: create service pod
+  hosts: kubernetes
+  become: true
+  user: devops
+  tasks:
+  - name: service pod
+    command: kubectl apply -f abctech-service.yml
+...
+
+
+
+    b) Service Playbook
+
+      vi service-playbook.yml
+
+---
+- name: create service pod
+  hosts: kubernetes
+  become: true
+  user: devops
+  tasks:
+  - name: service pod
+    command: kubectl apply -f abctech-service.yml
+...
+
+
+
+  3. Integrate Kubernetes with Ansible
+
+     To accomplish this task we need to create SSH connectivity between Ansible host, and Kubernetes Master Machine.
+      
+       ---> On Kuberntes master machine
+             > create user and password. I created a user 'devops'
+
+       ---> On Ansible host
+             > ssh-keygen to generate the ssh keys
+
+             > ssh-copy-id <user name>@private_ip_of_kubernetes_master_VM  to copy the public keys to authoried_keys on worker nodes
+
+             > Connect to kubernetes VM via SSH ==>  ssh <user name>@private_ip_of_kubernetes_master_VM
+ 
+             > Add the kubernetes master VM ipaddress to to inventory file ==> sudo vim /etc/ansible/hosts
+
+
+      ---> nodes.inv (inventory file)
+           [nodes]
+           10.206.0.8 ansible_user=devops
+           10.206.0.7 ansible_user=devops
+
+           [kubernetes]
+           10.206.0.32
+
+
+  4. Deploy Artifacts on Kubernetes
+
+     This can be done manually by running the ansible playbook commands to deploy our artifact on kubernetes cluster.
+     But we want to automate this CI/CD process using jenkins. For this we need to perform following tasks:
+
+
+    a) Set Up Kubernetes with Jenkins
+
+       > Install kubernetes plugin (On Jenkins Dashboard > Manage Jenkins > Plugins)
+       
+       > Configure Jenkins to connect to your Kubernetes
+         ( Jenkins Dashboard > Manage Jenkins Credentials > System > Global credentials (unrestricted) )
+
+        - Create credentialsID using password and kubernetes user (devops) to connect Jenkins with kubenetes.
+          Label created for credentialsID to run kubernetes commands is "mykubernetes"
+
+
+      > Write/generate pipeline script to deploy artifact via Jenkins using ansible.
+
+
+
+     pipeline 
+{
+    agent any
+    environment 
+       {
+        WORK_DIR = "/var/lib/jenkins/workspace/ABC-Technologies-CI"
+       }
+
+    stages 
+    {
+        stage('Code Checkout') 
+        {
+	       steps 
+               {
+                  git 'https://github.com/sergeakak/ABC-Technologies.git'
+               }
+               
+            
+        }
+
+stage('Copy War File') {
+            steps {
+                sh 'cp ${WORK_DIR}/target/ABCtechnologies-1.0.war abc_tech.war'
+            }
+
+        }
+
+
+stage('Deploy as Docker Container with Ansible Playbook') 
+           {
+             steps {
+                    
+                    script {
+                             ansiblePlaybook credentialsId: 'myansible2',
+			            disableHostKeyChecking: true,
+			                      installation: 'ansible',
+			                         inventory: 'nodes.inv',
+			                          playbook: 'deploy_docker_playbook.yml',
+			                      vaultTmpPath: ''
+			}
+                  }
+ 
+            }
+
+stage('Deploy on kubernetes') 
+           {
+             steps {
+                    
+                    script {
+                             ansiblePlaybook credentialsId: 'myansible2',
+			            disableHostKeyChecking: true,
+			                      installation: 'ansible',
+			                         inventory: 'nodes.inv',
+			                          playbook: 'deployment-playbook.yml',
+			                      vaultTmpPath: ''
+		          }
+		         	
+                   } 
+                  
+            }
+
+    }
+}
+
+
+
+
+         
+===> This integration allows us to build a complete CI/CD pipeline with:
+
+     a) Jenkins orchestrating tasks,
+
+     b) Ansible automating infrastructure management,
+
+     c) And Docker/Kubernetes handling containerization and orchestration
+
+
+
+===> We will create Jenkinsfile script to run the complete CI/CD pipeline and push to our github
+     along with all necessary files such as dockerfile, inventory file, playbooks, manifest files...
+
+===> Here is the github link to verify: https://github.com/sergeakak/ABC-Technologies
+
+
+==> On Jenkins we will configure our CI/CD job with Definition of Pipeline --> Pipeline Script from SCM 
+    
+
+
+
+
+================================================================================================================
+          Task 5: Monitoring Of Resources
+================================================================================================================
+
+
+Using Prometheus monitor the resources like CPU utilization: Total Usage, Usage per core, usage 
+breakdown, Memory , Network on the instance by providing the end points in local host. 
+
+
+
+1- Install node exporter and add URL to target in Prometheus. 
+
+
+===> In a newly created VM on my GCP i have installed Prometheus and Grafana.
+
+===> In my Kuberbernetes Master VM i have installed node exporter, and added as target on Prometheus
+     by editing or configuing the prometheus.yml file in prometheus VM with follwing commands:
+
+
+     --> cd to etc/prometheus and open prometheus.yml
+
+         sudo vi prometheus.yml
+
+            job_name: 'Node_exporter'
+              scrape_interval: 5s
+              static_configs:
+               - targets: ['public IP of instance where node exporter is installed:9100']
+
+     --> then reststart ==> sudo systemctl restart prometheus
+
+
+
+2- Using this data login to Grafana and create a dashboard to show the metrics
+
+
+===> On grafana Dashboard:
+
+     --> added prometheus as data source by providing prometheus URL/IP adress
+         and testing connection.
+
+     --> I created or imported dashboard from https://grafana.com/grafana/dashboards/1860-node-exporter-full/
+         and now we can visualize metrics for CPU, Memory, Network...
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
